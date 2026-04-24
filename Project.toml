@@ -1,0 +1,7 @@
+name = "SoundSwarms"
+uuid = "3f298455-7854-40cc-b792-f8ad6ff443b1"
+authors = ["czachreson"]
+version = "0.1.0"
+
+[compat]
+julia = "1"
