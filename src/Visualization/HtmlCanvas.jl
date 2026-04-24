@@ -46,6 +46,7 @@ function write_diagnostic_html_animation(
      trace_canvas_height::Integer = 260,
      fps::Real = 30,
      trail_alpha::Real = 0.12,
+     feature_trace_keys = (:rms, :low_band, :mid_band, :high_band, :onset_strength),
 )
      !isempty(swarm_frames) || throw(ArgumentError("swarm_frames must not be empty"))
      length(swarm_frames) == length(audio_frames) || throw(ArgumentError("swarm_frames and audio_frames must have the same length"))
@@ -56,6 +57,7 @@ function write_diagnostic_html_animation(
      trace_canvas_height > 0 || throw(ArgumentError("trace_canvas_height must be positive"))
      fps > 0 || throw(ArgumentError("fps must be positive"))
      0 <= trail_alpha <= 1 || throw(ArgumentError("trail_alpha must be between 0 and 1"))
+     trace_keys = collect_feature_trace_keys(feature_trace_keys)
 
      mkpath(dirname(path))
 
@@ -72,6 +74,7 @@ function write_diagnostic_html_animation(
                     trace_canvas_height,
                     Float64(fps),
                     Float64(trail_alpha),
+                    trace_keys,
                ),
           )
      end
@@ -184,6 +187,7 @@ function diagnostic_html_document(
      trace_canvas_height,
      fps,
      trail_alpha,
+     trace_keys,
 )
      return """
      <!doctype html>
@@ -231,7 +235,7 @@ function diagnostic_html_document(
           <script>
                const swarmFrames = $(frames_json(swarm_frames));
                const audioFrames = $(audio_frames_json(audio_frames));
-               const traceKeys = ["rms", "low_band", "mid_band", "high_band", "onset_strength"];
+               const traceKeys = $(trace_keys_json(trace_keys));
                const traceColors = {
                     rms: "#78dce8",
                     low_band: "#a9dc76",
@@ -358,3 +362,27 @@ function audio_frame_json(frame)
             "\"onset_strength\":$(frame.onset_strength)" *
             "}"
 end
+
+function collect_feature_trace_keys(feature_trace_keys)
+     trace_keys = Symbol.(collect(feature_trace_keys))
+     !isempty(trace_keys) || throw(ArgumentError("feature_trace_keys must not be empty"))
+
+     for key in trace_keys
+          is_diagnostic_audio_feature(key) || throw(ArgumentError("unsupported feature trace key: $(key)"))
+     end
+
+     return trace_keys
+end
+
+function trace_keys_json(trace_keys)
+     return "[" * join(["\"$(key)\"" for key in trace_keys], ",") * "]"
+end
+
+is_diagnostic_audio_feature(feature::Symbol) = feature in (
+     :rms,
+     :low_band,
+     :mid_band,
+     :high_band,
+     :spectral_centroid,
+     :onset_strength,
+)
