@@ -2,7 +2,7 @@
 
 ## Goal
 
-Define the first architecture for a Julia package that simulates 2D swarms whose dynamics can respond to real-time or recorded audio input. The immediate design priority is real-time microphone input, while keeping recorded audio and deterministic tests straightforward.
+Define the first architecture for `SoundSwarms.jl`, a Julia package that simulates 2D swarms whose dynamics can respond to real-time or recorded audio input. The intended final use case is live deployment in party or music environments, while early development can use synthetic input data for deterministic progress.
 
 ## Core Invariant
 
@@ -21,7 +21,7 @@ This keeps the simulation engine testable and lets audio, mapping, and visualiza
 ```text
 Project.toml
 src/
-     Swarms.jl
+     SoundSwarms.jl
      Simulation/
           Simulation.jl
           State.jl
@@ -58,7 +58,7 @@ docs/
      worklogs/
 ```
 
-The package name can remain `Swarms.jl` unless a more specific name is chosen before scaffolding.
+The package name is `SoundSwarms.jl`.
 
 ## Simulation Engine
 
@@ -96,7 +96,7 @@ Initial model features:
 - Alignment radius.
 - Base speed.
 - Angular noise.
-- Periodic or bounded domain.
+- Periodic domain boundaries.
 
 Later model extensions can include adhesion, repulsion, trail-following, vortexing, and other visually interesting dynamics.
 
@@ -110,6 +110,7 @@ Initial responsibilities:
 - Buffer short audio windows.
 - Extract normalized features from each window.
 - Smooth noisy feature streams before they reach the control layer.
+- Store feature frames in a finite-length history buffer.
 
 Candidate types:
 
@@ -119,6 +120,7 @@ MicrophoneSource
 RecordedAudioSource
 AudioBuffer
 AudioFeatureFrame
+AudioFeatureBuffer
 AudioFeatureConfig
 ```
 
@@ -134,6 +136,10 @@ Initial feature candidates:
 
 Real-time audio should update a latest-frame buffer or equivalent state. The simulation loop should read the latest smoothed frame when it advances.
 
+The feature history buffer should support smooth behavior transitions and longer-timescale responses. For example, control mappings may use recent feature values for immediate reactions, while rhythm, phrase, or energy-trend logic can use summaries over longer windows.
+
+Microphone input can be deferred until the simulation, control, and visualization foundations are in place. Early work should use synthetic feature streams and recorded/simulated feature frames. When real audio input is added, cross-platform support should be evaluated because the development environment will include both Windows and Linux. Candidate ecosystems to investigate include `AudioIO.jl`, which appears no longer maintained, and the broader JuliaAudio projects on GitHub.
+
 ## Control Mapping
 
 The control layer maps audio features onto model parameters. This is where creative interpretation belongs.
@@ -141,6 +147,7 @@ The control layer maps audio features onto model parameters. This is where creat
 Initial responsibilities:
 
 - Convert `AudioFeatureFrame` values into normalized `ControlFrame` values.
+- Summarize `AudioFeatureBuffer` history for longer-timescale control.
 - Apply a `ControlFrame` to base simulation parameters.
 - Keep mappings configurable and independently testable.
 
@@ -188,7 +195,7 @@ Candidate Julia tools to evaluate:
 - `GLMakie.jl` for real-time 2D visualization.
 - `Observables.jl` if using Makie reactive state.
 
-The final visualization stack should be chosen after checking package compatibility and performance on the target development environment.
+The final visualization stack should be chosen after discussion and after checking package compatibility and performance on the target development environments. Initial visualization priority is particles plus trails, so the design should include data structures suitable for maintaining a trail or pixel field.
 
 ## Configuration
 
@@ -259,17 +266,17 @@ Real microphone input should not be required by the normal test suite. Microphon
 1. Scaffold the Julia package structure.
 2. Add core simulation state, parameters, and fixed-step Vicsek update.
 3. Add deterministic simulation tests.
-4. Add audio feature-frame and control-frame types without device IO.
-5. Add simple feature-to-parameter mappings and tests.
+4. Add audio feature-frame, feature-buffer, and control-frame types without device IO.
+5. Add simple feature/history-to-parameter mappings and tests.
 6. Add synthetic audio feature examples.
-7. Evaluate real-time audio input packages on Windows.
-8. Add a minimal real-time visualization loop.
-9. Connect microphone features to visualization through the control layer.
+7. Add particles-plus-trails visualization using synthetic control input.
+8. Discuss and choose the initial visualization stack.
+9. Evaluate real-time audio input packages on Windows and Linux.
+10. Connect microphone features to visualization through the control layer.
 
 ## Open Questions
 
-- Package name: should it remain `Swarms.jl`?
-- Visualization stack: should the first target be `GLMakie.jl`?
-- Audio input package: which Julia package is most reliable on Windows?
-- Boundary model: periodic domain first, bounded domain first, or both?
-- Initial visual priority: particles only, particles plus trails, or particles plus audio-reactive styling?
+- Visualization stack: should the first target be `GLMakie.jl`, another Julia graphics stack, or a separate rendering process?
+- Audio input package: which Julia package is reliable enough across Windows and Linux?
+- Feature history: what buffer length and summary statistics are useful for rhythm-scale behavior?
+- Trail representation: should trails be particle histories, a decaying pixel field, or both?
