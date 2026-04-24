@@ -6,7 +6,7 @@ include("Visualization/Visualization.jl")
 using .Simulation
 using .Visualization
 
-export SwarmParameters, SwarmState, step!
+export SwarmParameters, SwarmState, initialize_swarm, step!
 export SwarmFrame, write_html_animation
 
 end
