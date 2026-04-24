@@ -185,3 +185,7 @@ so it folds to:
      is_dashdot_line_object(obj::SVGElement)
      """
 ``` 
+
+## Codex Troubleshooting
+[User Note] if codex can't resolve the package in windows, the user can resolve to update the manifest. Run this from the powershell terminal:
+julia --project=. -e "import Pkg; Pkg.resolve(); Pkg.instantiate(); Pkg.precompile()"

@@ -1,4 +1,6 @@
-function step!(state::SwarmState, params::SwarmParameters, dt::Real, rng)
+using Random: AbstractRNG
+
+function step!(state::SwarmState, params::SwarmParameters, dt::Real, rng::AbstractRNG)
      dt >= 0 || throw(ArgumentError("dt must be non-negative"))
 
      particle_count = length(state.headings)
