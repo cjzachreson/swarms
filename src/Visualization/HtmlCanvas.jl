@@ -44,9 +44,11 @@ function write_diagnostic_html_animation(
      canvas_width::Integer = 1000,
      swarm_canvas_height::Integer = 620,
      trace_canvas_height::Integer = 260,
+     spectrum_canvas_height::Integer = 220,
      fps::Real = 30,
      trail_alpha::Real = 0.12,
      feature_trace_keys = (:rms, :low_band, :mid_band, :high_band, :onset_strength),
+     spectrum_frames = nothing,
 )
      !isempty(swarm_frames) || throw(ArgumentError("swarm_frames must not be empty"))
      length(swarm_frames) == length(audio_frames) || throw(ArgumentError("swarm_frames and audio_frames must have the same length"))
@@ -55,9 +57,13 @@ function write_diagnostic_html_animation(
      canvas_width > 0 || throw(ArgumentError("canvas_width must be positive"))
      swarm_canvas_height > 0 || throw(ArgumentError("swarm_canvas_height must be positive"))
      trace_canvas_height > 0 || throw(ArgumentError("trace_canvas_height must be positive"))
+     spectrum_canvas_height > 0 || throw(ArgumentError("spectrum_canvas_height must be positive"))
      fps > 0 || throw(ArgumentError("fps must be positive"))
      0 <= trail_alpha <= 1 || throw(ArgumentError("trail_alpha must be between 0 and 1"))
      trace_keys = collect_feature_trace_keys(feature_trace_keys)
+     if spectrum_frames !== nothing
+          length(swarm_frames) == length(spectrum_frames) || throw(ArgumentError("swarm_frames and spectrum_frames must have the same length"))
+     end
 
      mkpath(dirname(path))
 
@@ -72,9 +78,11 @@ function write_diagnostic_html_animation(
                     canvas_width,
                     swarm_canvas_height,
                     trace_canvas_height,
+                    spectrum_canvas_height,
                     Float64(fps),
                     Float64(trail_alpha),
                     trace_keys,
+                    spectrum_frames,
                ),
           )
      end
@@ -185,10 +193,16 @@ function diagnostic_html_document(
      canvas_width,
      swarm_canvas_height,
      trace_canvas_height,
+     spectrum_canvas_height,
      fps,
      trail_alpha,
      trace_keys,
+     spectrum_frames,
 )
+     spectrum_canvas = spectrum_frames === nothing ? "" : """<canvas id="spectrum" width="$(canvas_width)" height="$(spectrum_canvas_height)"></canvas>"""
+     spectrum_json = spectrum_frames === nothing ? "[]" : spectrum_frames_json(spectrum_frames)
+     has_spectrum = spectrum_frames === nothing ? "false" : "true"
+
      return """
      <!doctype html>
      <html lang="en">
@@ -231,24 +245,30 @@ function diagnostic_html_document(
           <main>
                <canvas id="swarm" width="$(canvas_width)" height="$(swarm_canvas_height)"></canvas>
                <canvas id="traces" width="$(canvas_width)" height="$(trace_canvas_height)"></canvas>
+               $(spectrum_canvas)
           </main>
           <script>
                const swarmFrames = $(frames_json(swarm_frames));
                const audioFrames = $(audio_frames_json(audio_frames));
+               const spectrumFrames = $(spectrum_json);
+               const hasSpectrum = $(has_spectrum);
                const traceKeys = $(trace_keys_json(trace_keys));
                const traceColors = {
                     rms: "#78dce8",
                     low_band: "#a9dc76",
                     mid_band: "#ffd866",
                     high_band: "#ff6188",
+                    spectral_centroid: "#fc9867",
                     onset_strength: "#ab9df2"
                };
                const domainWidth = $(domain_width);
                const domainHeight = $(domain_height);
                const swarmCanvas = document.getElementById("swarm");
                const traceCanvas = document.getElementById("traces");
+               const spectrumCanvas = document.getElementById("spectrum");
                const swarmCtx = swarmCanvas.getContext("2d");
                const traceCtx = traceCanvas.getContext("2d");
+               const spectrumCtx = hasSpectrum ? spectrumCanvas.getContext("2d") : null;
                const frameInterval = 1000 / $(fps);
                let frameIndex = 0;
                let previousTime = 0;
@@ -324,10 +344,66 @@ function diagnostic_html_document(
                     }
                }
 
+               function heatColor(value) {
+                    const v = Math.max(0, Math.min(1, value));
+                    const r = Math.floor(255 * Math.max(0, Math.min(1, 1.8 * v - 0.35)));
+                    const g = Math.floor(255 * Math.max(0, Math.min(1, 1.8 * v)));
+                    const b = Math.floor(255 * Math.max(0, Math.min(1, 0.9 - 1.2 * v)));
+                    return "rgb(" + r + ", " + g + ", " + b + ")";
+               }
+
+               function drawSpectrum(currentIndex) {
+                    if (!hasSpectrum) {
+                         return;
+                    }
+
+                    spectrumCtx.fillStyle = "#050607";
+                    spectrumCtx.fillRect(0, 0, spectrumCanvas.width, spectrumCanvas.height);
+
+                    const leftPad = 64;
+                    const rightPad = 14;
+                    const topPad = 18;
+                    const bottomPad = 28;
+                    const plotWidth = spectrumCanvas.width - leftPad - rightPad;
+                    const plotHeight = spectrumCanvas.height - topPad - bottomPad;
+                    const frameWidth = plotWidth / Math.max(1, spectrumFrames.length);
+                    const binCount = spectrumFrames[0].amplitudes.length;
+                    const binHeight = plotHeight / Math.max(1, binCount);
+
+                    for (let i = 0; i < spectrumFrames.length; i++) {
+                         const amplitudes = spectrumFrames[i].amplitudes;
+                         for (let bin = 0; bin < amplitudes.length; bin++) {
+                              spectrumCtx.fillStyle = heatColor(amplitudes[bin]);
+                              const x = leftPad + i * frameWidth;
+                              const y = topPad + plotHeight - (bin + 1) * binHeight;
+                              spectrumCtx.fillRect(x, y, Math.ceil(frameWidth) + 1, Math.ceil(binHeight) + 1);
+                         }
+                    }
+
+                    spectrumCtx.strokeStyle = "#2f363d";
+                    spectrumCtx.lineWidth = 1;
+                    spectrumCtx.strokeRect(leftPad, topPad, plotWidth, plotHeight);
+
+                    spectrumCtx.fillStyle = "#b8c0c7";
+                    spectrumCtx.font = "12px system-ui";
+                    spectrumCtx.fillText("spectrum", leftPad, 13);
+                    spectrumCtx.fillText("low", 36, topPad + plotHeight);
+                    spectrumCtx.fillText("high", 32, topPad + 5);
+
+                    const cursorX = leftPad + (currentIndex / Math.max(1, spectrumFrames.length - 1)) * plotWidth;
+                    spectrumCtx.strokeStyle = "#f2f5f7";
+                    spectrumCtx.lineWidth = 1;
+                    spectrumCtx.beginPath();
+                    spectrumCtx.moveTo(cursorX, topPad);
+                    spectrumCtx.lineTo(cursorX, topPad + plotHeight);
+                    spectrumCtx.stroke();
+               }
+
                function animate(timestamp) {
                     if (timestamp - previousTime >= frameInterval) {
                          drawSwarm(swarmFrames[frameIndex]);
                          drawTraces(frameIndex);
+                         drawSpectrum(frameIndex);
                          frameIndex = (frameIndex + 1) % swarmFrames.length;
                          previousTime = timestamp;
                     }
@@ -338,6 +414,7 @@ function diagnostic_html_document(
                swarmCtx.fillStyle = "#050607";
                swarmCtx.fillRect(0, 0, swarmCanvas.width, swarmCanvas.height);
                drawTraces(0);
+               drawSpectrum(0);
                requestAnimationFrame(animate);
           </script>
      </body>
@@ -360,6 +437,23 @@ function audio_frame_json(frame)
             "\"high_band\":$(frame.high_band)," *
             "\"spectral_centroid\":$(frame.spectral_centroid)," *
             "\"onset_strength\":$(frame.onset_strength)" *
+            "}"
+end
+
+function spectrum_frames_json(spectrum_frames)
+     frame_strings = [spectrum_frame_json(frame) for frame in spectrum_frames]
+
+     return "[" * join(frame_strings, ",") * "]"
+end
+
+function spectrum_frame_json(frame)
+     frequencies = "[" * join(string.(frame.frequencies), ",") * "]"
+     amplitudes = "[" * join(string.(frame.amplitudes), ",") * "]"
+
+     return "{" *
+            "\"time\":$(frame.time)," *
+            "\"frequencies\":$(frequencies)," *
+            "\"amplitudes\":$(amplitudes)" *
             "}"
 end
 
