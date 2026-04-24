@@ -26,7 +26,7 @@
 - **⚠️ AVOID BROAD TRY-CATCH**: Include full stack info if needed; avoid during development debugging 
 
 ## Project Context  
-This project is about creating swarm simulations that respond to audio or audio-visual input signals. The basic logic is 2D standard-vicsek-model with some modifications that will be added for interesting visual dynamics (adhesion, repulsion, trail-following, vortexing, etc.)
+This project is about creating swarm simulations that respond to audio or audio-visual input signals. The basic logic is 2D standard-vicsek-model with some modifications that will be added for interesting visual dynamics (adhesion, repulsion, trail-following, vortexing, etc.). This will be developed as a julia package. 
 
 ---
 
@@ -70,10 +70,10 @@ For example, avoid jargon-heavy checklists
 if you see the notification: "summarizing conversation history" or similar this means you're working with a compressed context that may have lost important information. It may be necessary to refresh context from worklogs, plans, and reports. 
 
 
-**Worklogs and Context Refresh** (aligned with `.continue/rules/worklogs/rules.md`)
+**Worklogs and Context Refresh**
 
 ## Refresh Triggers
-- Run at session start, on "refresh context," or every 3 checkpoints
+- Run at session start, on "refresh context" commands, or after compressing context
 
 ## Refresh Process  
 1. Starting from most recent worklog, scan backward until latest `## [Plan ...]` is found
@@ -148,6 +148,12 @@ Linux/bash equivalents:
 
 - Full test suite:
   - julia -e 'using Pkg; Pkg.activate("."); Pkg.test()'
+
+## Working documentation structure
+ - <repo-root>\docs\ contains \plans, \reports, and \worklogs
+ - \plans is for ad-hoc documentation of large-scale workplans, guided by the user, recoreded as \plans\PLAN_*.md
+ - \reports is for finalising summary documentation after the plans recorded in \plans are completed, recorded as \reports\REPORT_*.md
+ - \worklogs is for automatic checkpoint entry (which can include planning checkpoints - these can detail expansions of the documented steps recorded in \plans, recorded as per instructions above)
 
 ## Style notes
 **Docstring Style**
