@@ -12,14 +12,9 @@ function run_example()
      step_count = 900
      dt = 1.0
      feature_dt = 1 / 30
-     swarm_frames = SwarmFrame[]
      audio_frames = synthetic_feature_frames(step_count; dt = feature_dt)
-
-     for frame in audio_frames
-          params = map_features_to_parameters(base_params, frame, mapping, dt)
-          push!(swarm_frames, SwarmFrame(state.positions))
-          step!(state, params, dt, rng)
-     end
+     run_frames = run_controlled_simulation(state, base_params, audio_frames, mapping, dt, rng)
+     swarm_frames = [frame.swarm for frame in run_frames]
 
      output_path = joinpath("outputs", "diagnostic_audio_controlled_vicsek.html")
      write_diagnostic_html_animation(
