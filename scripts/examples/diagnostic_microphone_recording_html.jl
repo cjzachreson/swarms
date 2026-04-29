@@ -4,7 +4,7 @@ using SoundSwarms
 
 function run_example()
      rng = MersenneTwister(126)
-     sample_rate = 44100
+     sample_rate = 48000
      window_size = 1024
      duration_seconds = 5.0
      frame_count = ceil(Int, duration_seconds * sample_rate / window_size)
@@ -12,9 +12,10 @@ function run_example()
      domain_height = 100.0
      base_params = SwarmParameters(0.6, 7.0, 0.12, domain_width, domain_height)
      mapping = FeatureParameterMapping(0.05, 1.6, 0.01, 1.4; speed_feature = :rms, noise_feature = :onset_strength)
+     input_device = preferred_input_device("C270 HD WEBCAM")
 
-     println("Recording $(duration_seconds) seconds from default input at $(sample_rate) Hz...")
-     sample_frames = record_microphone_sample_frames(frame_count; sample_rate = sample_rate, window_size = window_size)
+     cue_recording(input_device, duration_seconds, sample_rate)
+     sample_frames = record_microphone_sample_frames(input_device, frame_count; sample_rate = sample_rate, window_size = window_size)
      analysis = analyze_sample_frames_dsp(sample_frames; max_frequency = 5000.0, spectrum_bin_count = 72, spectrum_normalization = :global)
      onset_frames = with_onset_strength(analysis.features, OnsetStrengthConfig(4.0))
      smoothed_frames = smooth_feature_frames(onset_frames, ExponentialSmoothingConfig(0.25))
@@ -41,11 +42,11 @@ function run_example()
      println("Wrote $(output_path)")
 end
 
-function record_microphone_sample_frames(frame_count::Integer; sample_rate::Integer, window_size::Integer)
+function record_microphone_sample_frames(input_device, frame_count::Integer; sample_rate::Integer, window_size::Integer)
      frame_count > 0 || throw(ArgumentError("frame_count must be positive"))
      window_size > 0 || throw(ArgumentError("window_size must be positive"))
 
-     stream = PortAudioStream(1, 0; samplerate = sample_rate, frames_per_buffer = window_size)
+     stream = PortAudioStream(input_device, 1, 0; samplerate = sample_rate, frames_per_buffer = window_size)
      frames = AudioSampleFrame[]
 
      try
@@ -60,6 +61,29 @@ function record_microphone_sample_frames(frame_count::Integer; sample_rate::Inte
      end
 
      return frames
+end
+
+function preferred_input_device(name_fragment::AbstractString)
+     input_devices = [device for device in devices() if device.input_bounds.max_channels > 0]
+
+     for device in input_devices
+          if occursin(name_fragment, device.name)
+               return device
+          end
+     end
+
+     available = join(["- $(device.name)" for device in input_devices], "\n")
+     throw(ArgumentError("preferred input device containing \"$(name_fragment)\" was not found. Available input devices:\n$(available)"))
+end
+
+function cue_recording(input_device, duration_seconds::Real, sample_rate::Integer)
+     println("Recording $(duration_seconds) seconds from: $(input_device.name)")
+     println("Sample rate: $(sample_rate) Hz")
+     for count in 3:-1:1
+          println("Starting in $(count)...")
+          sleep(1)
+     end
+     println("Recording now.")
 end
 
 function mono_samples(buffer)
