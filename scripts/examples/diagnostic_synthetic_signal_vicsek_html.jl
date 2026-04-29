@@ -10,7 +10,7 @@ function run_example()
      mapping = FeatureParameterMapping(0.05, 2.2, 0.02, 1.1; speed_feature = :rms, noise_feature = :spectral_centroid)
      state = initialize_swarm(particle_count, base_params, rng)
      sample_frames = synthetic_sweep_sample_frames(520; sample_rate = 8000.0, window_size = 256, hop_size = 128)
-     analysis = analyze_sample_frames(sample_frames; max_frequency = 3000.0, spectrum_bin_count = 56)
+     analysis = analyze_sample_frames_dsp(sample_frames; max_frequency = 3000.0, spectrum_bin_count = 56)
      run_frames = run_controlled_simulation(state, base_params, analysis.features, mapping, 1.0, rng)
      swarm_frames = [frame.swarm for frame in run_frames]
      parameter_frames = [frame.params for frame in run_frames]

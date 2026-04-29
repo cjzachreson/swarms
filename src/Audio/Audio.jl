@@ -8,7 +8,7 @@ include("Analysis.jl")
 
 export AudioFeatureBuffer, AudioFeatureFrame, buffer_capacity, latest_feature, push_feature!
 export AudioSampleFrame, AudioSpectrumFrame
-export analyze_sample_frame, analyze_sample_frames
+export analyze_sample_frame, analyze_sample_frame_dsp, analyze_sample_frames, analyze_sample_frames_dsp
 export synthetic_feature_frame, synthetic_feature_frames, synthetic_sweep_sample_frames
 
 end
