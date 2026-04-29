@@ -16,6 +16,7 @@ export SwarmParameters, SwarmState, initialize_swarm, step!
 export AudioFeatureBuffer, AudioFeatureFrame, buffer_capacity, latest_feature, push_feature!
 export AudioSampleFrame, AudioSpectrumFrame
 export analyze_sample_frame, analyze_sample_frame_dsp, analyze_sample_frames, analyze_sample_frames_dsp
+export ExponentialSmoothingConfig, FeatureSmoothingConfig, smooth_feature_frames
 export synthetic_feature_frame, synthetic_feature_frames, synthetic_sweep_sample_frames
 export FeatureParameterMapping, map_features_to_parameters
 export SwarmFrame, write_diagnostic_html_animation, write_html_animation
