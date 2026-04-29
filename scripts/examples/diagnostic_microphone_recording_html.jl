@@ -2,44 +2,79 @@ using PortAudio
 using Random
 using SoundSwarms
 
+struct MicrophoneDiagnosticConfig
+     device_name_fragment::String
+     sample_rate::Int
+     window_size::Int
+     duration_seconds::Float64
+     output_path::String
+     max_frequency::Float64
+     spectrum_bin_count::Int
+     onset_scale::Float64
+     smoothing_alpha::Float64
+     envelope_attack_alpha::Float64
+     envelope_decay_alpha::Float64
+     particle_count::Int
+     domain_width::Float64
+     domain_height::Float64
+     fps::Float64
+     trail_alpha::Float64
+     mapping::FeatureParameterMapping
+     base_params::SwarmParameters
+end
+
+const MICROPHONE_DIAGNOSTIC_CONFIG = MicrophoneDiagnosticConfig(
+     "C270 HD WEBCAM",
+     48000,
+     1024,
+     5.0,
+     joinpath("outputs", "diagnostic_microphone_recording.html"),
+     5000.0,
+     72,
+     4.0,
+     0.25,
+     0.8,
+     0.08,
+     220,
+     100.0,
+     100.0,
+     45.0,
+     0.08,
+     FeatureParameterMapping(0.05, 1.6, 0.01, 1.4; speed_feature = :rms, noise_feature = :onset_strength),
+     SwarmParameters(0.6, 7.0, 0.12, 100.0, 100.0),
+)
+
 function run_example()
      rng = MersenneTwister(126)
-     sample_rate = 48000
-     window_size = 1024
-     duration_seconds = 5.0
-     frame_count = ceil(Int, duration_seconds * sample_rate / window_size)
-     domain_width = 100.0
-     domain_height = 100.0
-     base_params = SwarmParameters(0.6, 7.0, 0.12, domain_width, domain_height)
-     mapping = FeatureParameterMapping(0.05, 1.6, 0.01, 1.4; speed_feature = :rms, noise_feature = :onset_strength)
-     input_device = preferred_input_device("C270 HD WEBCAM")
+     config = MICROPHONE_DIAGNOSTIC_CONFIG
+     frame_count = ceil(Int, config.duration_seconds * config.sample_rate / config.window_size)
+     input_device = preferred_input_device(config.device_name_fragment)
 
-     cue_recording(input_device, duration_seconds, sample_rate)
-     sample_frames = record_microphone_sample_frames(input_device, frame_count; sample_rate = sample_rate, window_size = window_size)
-     analysis = analyze_sample_frames_dsp(sample_frames; max_frequency = 5000.0, spectrum_bin_count = 72, spectrum_normalization = :global)
-     onset_frames = with_onset_strength(analysis.features, OnsetStrengthConfig(4.0))
-     smoothed_frames = smooth_feature_frames(onset_frames, ExponentialSmoothingConfig(0.25))
-     envelope = envelope_feature_values(onset_frames, PeakDecayEnvelopeConfig(0.8, 0.08); feature = :rms)
-     state = initialize_swarm(220, base_params, rng)
-     run_frames = run_controlled_simulation(state, base_params, smoothed_frames, mapping, 1.0, rng)
+     cue_recording(input_device, config)
+     sample_frames = record_microphone_sample_frames(input_device, frame_count; sample_rate = config.sample_rate, window_size = config.window_size)
+     analysis = analyze_sample_frames_dsp(sample_frames; max_frequency = config.max_frequency, spectrum_bin_count = config.spectrum_bin_count, spectrum_normalization = :global)
+     onset_frames = with_onset_strength(analysis.features, OnsetStrengthConfig(config.onset_scale))
+     smoothed_frames = smooth_feature_frames(onset_frames, ExponentialSmoothingConfig(config.smoothing_alpha))
+     envelope = envelope_feature_values(onset_frames, PeakDecayEnvelopeConfig(config.envelope_attack_alpha, config.envelope_decay_alpha); feature = :rms)
+     state = initialize_swarm(config.particle_count, config.base_params, rng)
+     run_frames = run_controlled_simulation(state, config.base_params, smoothed_frames, config.mapping, 1.0, rng)
      swarm_frames = [frame.swarm for frame in run_frames]
      parameter_frames = [frame.params for frame in run_frames]
 
-     output_path = joinpath("outputs", "diagnostic_microphone_recording.html")
      write_diagnostic_html_animation(
-          output_path,
+          config.output_path,
           swarm_frames,
           smoothed_frames,
-          domain_width,
-          domain_height;
-          fps = 45,
-          trail_alpha = 0.08,
+          config.domain_width,
+          config.domain_height;
+          fps = config.fps,
+          trail_alpha = config.trail_alpha,
           feature_trace_keys = (:rms, :onset_strength),
           extra_trace_series = (; rms_envelope = envelope),
           parameter_frames = parameter_frames,
           spectrum_frames = analysis.spectra,
      )
-     println("Wrote $(output_path)")
+     println("Wrote $(config.output_path)")
 end
 
 function record_microphone_sample_frames(input_device, frame_count::Integer; sample_rate::Integer, window_size::Integer)
@@ -76,9 +111,11 @@ function preferred_input_device(name_fragment::AbstractString)
      throw(ArgumentError("preferred input device containing \"$(name_fragment)\" was not found. Available input devices:\n$(available)"))
 end
 
-function cue_recording(input_device, duration_seconds::Real, sample_rate::Integer)
-     println("Recording $(duration_seconds) seconds from: $(input_device.name)")
-     println("Sample rate: $(sample_rate) Hz")
+function cue_recording(input_device, config::MicrophoneDiagnosticConfig)
+     println("Recording $(config.duration_seconds) seconds from: $(input_device.name)")
+     println("Sample rate: $(config.sample_rate) Hz")
+     println("Window size: $(config.window_size) samples")
+     println("Output: $(config.output_path)")
      for count in 3:-1:1
           println("Starting in $(count)...")
           sleep(1)
