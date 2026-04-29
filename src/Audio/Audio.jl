@@ -10,7 +10,8 @@ include("Smoothing.jl")
 export AudioFeatureBuffer, AudioFeatureFrame, buffer_capacity, latest_feature, push_feature!
 export AudioSampleFrame, AudioSpectrumFrame
 export analyze_sample_frame, analyze_sample_frame_dsp, analyze_sample_frames, analyze_sample_frames_dsp
-export ExponentialSmoothingConfig, FeatureSmoothingConfig, smooth_feature_frames
+export ExponentialSmoothingConfig, FeatureSmoothingConfig, OnsetStrengthConfig, PeakDecayEnvelopeConfig
+export envelope_feature_values, smooth_feature_frames, with_onset_strength
 export synthetic_feature_frame, synthetic_feature_frames, synthetic_sweep_sample_frames
 
 end
