@@ -81,6 +81,24 @@ function test_analyze_sample_frames_dsp_pairing()
      @test [frame.time for frame in analysis.spectra] == [frame.time for frame in frames]
 end
 
+function test_analyze_sample_frames_dsp_global_spectrum_normalization()
+     sample_rate = 8000.0
+     quiet_samples = [0.1 * sin(2pi * 200.0 * (index - 1) / sample_rate) for index in 1:512]
+     loud_samples = [1.0 * sin(2pi * 200.0 * (index - 1) / sample_rate) for index in 1:512]
+     frames = [
+          AudioSampleFrame(0.0, sample_rate, quiet_samples),
+          AudioSampleFrame(0.1, sample_rate, loud_samples),
+     ]
+
+     frame_normalized = analyze_sample_frames_dsp(frames; max_frequency = 2000.0, spectrum_bin_count = 24)
+     globally_normalized = analyze_sample_frames_dsp(frames; max_frequency = 2000.0, spectrum_bin_count = 24, spectrum_normalization = :global)
+
+     @test maximum(frame_normalized.spectra[1].amplitudes) ≈ maximum(frame_normalized.spectra[2].amplitudes)
+     @test maximum(globally_normalized.spectra[1].amplitudes) < maximum(globally_normalized.spectra[2].amplitudes)
+     @test maximum(globally_normalized.spectra[2].amplitudes) ≈ 1.0
+     @test_throws ArgumentError analyze_sample_frames_dsp(frames; spectrum_normalization = :not_a_mode)
+end
+
 @testset "Audio sample analysis" begin
      test_audio_sample_frame_validation()
      test_synthetic_sweep_sample_frames()
@@ -89,4 +107,5 @@ end
      test_analyze_sample_frame_dsp_separates_bands_and_centroid()
      test_analyze_sample_frames_pairing()
      test_analyze_sample_frames_dsp_pairing()
+     test_analyze_sample_frames_dsp_global_spectrum_normalization()
 end

@@ -36,6 +36,7 @@ function analyze_sample_frame_dsp(
      frame::AudioSampleFrame;
      max_frequency::Real = min(4000.0, frame.sample_rate / 2),
      spectrum_bin_count::Integer = 48,
+     normalize_spectrum::Bool = true,
 )
      max_frequency > 0 || throw(ArgumentError("max_frequency must be positive"))
      max_frequency <= frame.sample_rate / 2 || throw(ArgumentError("max_frequency must not exceed Nyquist frequency"))
@@ -46,7 +47,7 @@ function analyze_sample_frame_dsp(
      raw_amplitudes = sqrt.(max.(collect(power(periodogram_frame)), 0.0))
      frequencies = collect(range(20.0, Float64(max_frequency); length = spectrum_bin_count))
      amplitudes = [interpolated_amplitude(raw_frequencies, raw_amplitudes, frequency) for frequency in frequencies]
-     normalized_amplitudes = normalize_amplitudes(amplitudes)
+     normalized_amplitudes = normalize_spectrum ? normalize_amplitudes(amplitudes) : clamp01.(amplitudes)
      rms = clamp01(sqrt(sum(abs2, frame.samples) / length(frame.samples)))
      centroid = spectral_centroid(frequencies, normalized_amplitudes, Float64(max_frequency))
      low_band = band_level(frequencies, normalized_amplitudes, 20.0, 400.0)
@@ -58,12 +59,22 @@ function analyze_sample_frame_dsp(
      return (feature = feature, spectrum = spectrum)
 end
 
-function analyze_sample_frames_dsp(frames::AbstractVector{AudioSampleFrame}; kwargs...)
-     analyses = [analyze_sample_frame_dsp(frame; kwargs...) for frame in frames]
+function analyze_sample_frames_dsp(
+     frames::AbstractVector{AudioSampleFrame};
+     spectrum_normalization::Symbol = :frame,
+     kwargs...,
+)
+     spectrum_normalization in (:frame, :global) || throw(ArgumentError("spectrum_normalization must be :frame or :global"))
+     normalize_spectrum = spectrum_normalization === :frame
+     analyses = [analyze_sample_frame_dsp(frame; normalize_spectrum = normalize_spectrum, kwargs...) for frame in frames]
+     spectra = [analysis.spectrum for analysis in analyses]
+     if spectrum_normalization === :global
+          spectra = normalize_spectra_globally(spectra)
+     end
 
      return (
           features = [analysis.feature for analysis in analyses],
-          spectra = [analysis.spectrum for analysis in analyses],
+          spectra = spectra,
      )
 end
 
@@ -116,6 +127,21 @@ function normalize_amplitudes(amplitudes::Vector{Float64})
      maximum_amplitude > 0 || return zeros(Float64, length(amplitudes))
 
      return clamp01.(amplitudes ./ maximum_amplitude)
+end
+
+function normalize_spectra_globally(spectra::Vector{AudioSpectrumFrame})
+     isempty(spectra) && return AudioSpectrumFrame[]
+     maximum_amplitude = maximum(maximum(spectrum.amplitudes) for spectrum in spectra)
+     maximum_amplitude > 0 || return spectra
+
+     return [
+          AudioSpectrumFrame(
+               spectrum.time,
+               spectrum.frequencies,
+               clamp01.(spectrum.amplitudes ./ maximum_amplitude),
+          )
+          for spectrum in spectra
+     ]
 end
 
 clamp01(value::Real) = clamp(Float64(value), 0.0, 1.0)
