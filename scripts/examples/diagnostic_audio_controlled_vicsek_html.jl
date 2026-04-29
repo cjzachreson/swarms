@@ -15,6 +15,7 @@ function run_example()
      audio_frames = synthetic_feature_frames(step_count; dt = feature_dt)
      run_frames = run_controlled_simulation(state, base_params, audio_frames, mapping, dt, rng)
      swarm_frames = [frame.swarm for frame in run_frames]
+     parameter_frames = [frame.params for frame in run_frames]
 
      output_path = joinpath("outputs", "diagnostic_audio_controlled_vicsek.html")
      write_diagnostic_html_animation(
@@ -26,6 +27,7 @@ function run_example()
           fps = 45,
           trail_alpha = 0.08,
           feature_trace_keys = (:rms, :high_band),
+          parameter_frames = parameter_frames,
      )
      println("Wrote $(output_path)")
 end

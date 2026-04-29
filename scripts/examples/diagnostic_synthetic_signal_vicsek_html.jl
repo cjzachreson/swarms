@@ -13,6 +13,7 @@ function run_example()
      analysis = analyze_sample_frames(sample_frames; max_frequency = 3000.0, spectrum_bin_count = 56)
      run_frames = run_controlled_simulation(state, base_params, analysis.features, mapping, 1.0, rng)
      swarm_frames = [frame.swarm for frame in run_frames]
+     parameter_frames = [frame.params for frame in run_frames]
 
      output_path = joinpath("outputs", "diagnostic_synthetic_signal_vicsek.html")
      write_diagnostic_html_animation(
@@ -24,6 +25,7 @@ function run_example()
           fps = 45,
           trail_alpha = 0.08,
           feature_trace_keys = (:rms, :spectral_centroid),
+          parameter_frames = parameter_frames,
           spectrum_frames = analysis.spectra,
      )
      println("Wrote $(output_path)")

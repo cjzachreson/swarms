@@ -44,10 +44,12 @@ function write_diagnostic_html_animation(
      canvas_width::Integer = 1000,
      swarm_canvas_height::Integer = 620,
      trace_canvas_height::Integer = 260,
+     parameter_canvas_height::Integer = 220,
      spectrum_canvas_height::Integer = 220,
      fps::Real = 30,
      trail_alpha::Real = 0.12,
      feature_trace_keys = (:rms, :low_band, :mid_band, :high_band, :onset_strength),
+     parameter_frames = nothing,
      spectrum_frames = nothing,
 )
      !isempty(swarm_frames) || throw(ArgumentError("swarm_frames must not be empty"))
@@ -57,10 +59,14 @@ function write_diagnostic_html_animation(
      canvas_width > 0 || throw(ArgumentError("canvas_width must be positive"))
      swarm_canvas_height > 0 || throw(ArgumentError("swarm_canvas_height must be positive"))
      trace_canvas_height > 0 || throw(ArgumentError("trace_canvas_height must be positive"))
+     parameter_canvas_height > 0 || throw(ArgumentError("parameter_canvas_height must be positive"))
      spectrum_canvas_height > 0 || throw(ArgumentError("spectrum_canvas_height must be positive"))
      fps > 0 || throw(ArgumentError("fps must be positive"))
      0 <= trail_alpha <= 1 || throw(ArgumentError("trail_alpha must be between 0 and 1"))
      trace_keys = collect_feature_trace_keys(feature_trace_keys)
+     if parameter_frames !== nothing
+          length(swarm_frames) == length(parameter_frames) || throw(ArgumentError("swarm_frames and parameter_frames must have the same length"))
+     end
      if spectrum_frames !== nothing
           length(swarm_frames) == length(spectrum_frames) || throw(ArgumentError("swarm_frames and spectrum_frames must have the same length"))
      end
@@ -78,10 +84,12 @@ function write_diagnostic_html_animation(
                     canvas_width,
                     swarm_canvas_height,
                     trace_canvas_height,
+                    parameter_canvas_height,
                     spectrum_canvas_height,
                     Float64(fps),
                     Float64(trail_alpha),
                     trace_keys,
+                    parameter_frames,
                     spectrum_frames,
                ),
           )
@@ -193,12 +201,17 @@ function diagnostic_html_document(
      canvas_width,
      swarm_canvas_height,
      trace_canvas_height,
+     parameter_canvas_height,
      spectrum_canvas_height,
      fps,
      trail_alpha,
      trace_keys,
+     parameter_frames,
      spectrum_frames,
 )
+     parameter_canvas = parameter_frames === nothing ? "" : """<canvas id="parameters" width="$(canvas_width)" height="$(parameter_canvas_height)"></canvas>"""
+     parameter_json = parameter_frames === nothing ? "[]" : parameter_frames_json(parameter_frames)
+     has_parameter_frames = parameter_frames === nothing ? "false" : "true"
      spectrum_canvas = spectrum_frames === nothing ? "" : """<canvas id="spectrum" width="$(canvas_width)" height="$(spectrum_canvas_height)"></canvas>"""
      spectrum_json = spectrum_frames === nothing ? "[]" : spectrum_frames_json(spectrum_frames)
      has_spectrum = spectrum_frames === nothing ? "false" : "true"
@@ -245,12 +258,15 @@ function diagnostic_html_document(
           <main>
                <canvas id="swarm" width="$(canvas_width)" height="$(swarm_canvas_height)"></canvas>
                <canvas id="traces" width="$(canvas_width)" height="$(trace_canvas_height)"></canvas>
+               $(parameter_canvas)
                $(spectrum_canvas)
           </main>
           <script>
                const swarmFrames = $(frames_json(swarm_frames));
                const audioFrames = $(audio_frames_json(audio_frames));
+               const parameterFrames = $(parameter_json);
                const spectrumFrames = $(spectrum_json);
+               const hasParameterFrames = $(has_parameter_frames);
                const hasSpectrum = $(has_spectrum);
                const traceKeys = $(trace_keys_json(trace_keys));
                const traceColors = {
@@ -265,9 +281,11 @@ function diagnostic_html_document(
                const domainHeight = $(domain_height);
                const swarmCanvas = document.getElementById("swarm");
                const traceCanvas = document.getElementById("traces");
+               const parameterCanvas = document.getElementById("parameters");
                const spectrumCanvas = document.getElementById("spectrum");
                const swarmCtx = swarmCanvas.getContext("2d");
                const traceCtx = traceCanvas.getContext("2d");
+               const parameterCtx = hasParameterFrames ? parameterCanvas.getContext("2d") : null;
                const spectrumCtx = hasSpectrum ? spectrumCanvas.getContext("2d") : null;
                const frameInterval = 1000 / $(fps);
                let frameIndex = 0;
@@ -344,6 +362,76 @@ function diagnostic_html_document(
                     }
                }
 
+               function drawParameterTraces(currentIndex) {
+                    if (!hasParameterFrames) {
+                         return;
+                    }
+
+                    parameterCtx.fillStyle = "#050607";
+                    parameterCtx.fillRect(0, 0, parameterCanvas.width, parameterCanvas.height);
+
+                    const keys = [
+                         { name: "speed", color: "#78dce8" },
+                         { name: "noise_strength", color: "#ff6188" }
+                    ];
+                    const leftPad = 80;
+                    const rightPad = 14;
+                    const topPad = 18;
+                    const bottomPad = 24;
+                    const gap = 18;
+                    const plotWidth = parameterCanvas.width - leftPad - rightPad;
+                    const plotHeight = (parameterCanvas.height - topPad - bottomPad - gap) / keys.length;
+
+                    parameterCtx.fillStyle = "#b8c0c7";
+                    parameterCtx.font = "12px system-ui";
+                    parameterCtx.fillText("parameters", leftPad, 13);
+
+                    for (let plotIndex = 0; plotIndex < keys.length; plotIndex++) {
+                         const key = keys[plotIndex];
+                         const yTop = topPad + plotIndex * (plotHeight + gap);
+                         const values = parameterFrames.map((frame) => frame[key.name]);
+                         let minValue = Math.min(...values);
+                         let maxValue = Math.max(...values);
+                         if (maxValue === minValue) {
+                              maxValue = minValue + 1;
+                         }
+
+                         parameterCtx.strokeStyle = "#2f363d";
+                         parameterCtx.lineWidth = 1;
+                         parameterCtx.strokeRect(leftPad, yTop, plotWidth, plotHeight);
+
+                         parameterCtx.fillStyle = "#b8c0c7";
+                         parameterCtx.fillText(key.name, 8, yTop + 13);
+                         parameterCtx.fillText(maxValue.toFixed(2), 42, yTop + 12);
+                         parameterCtx.fillText(minValue.toFixed(2), 42, yTop + plotHeight);
+
+                         parameterCtx.strokeStyle = key.color;
+                         parameterCtx.lineWidth = 2;
+                         parameterCtx.beginPath();
+
+                         for (let i = 0; i < parameterFrames.length; i++) {
+                              const x = leftPad + (i / Math.max(1, parameterFrames.length - 1)) * plotWidth;
+                              const amount = (parameterFrames[i][key.name] - minValue) / (maxValue - minValue);
+                              const y = yTop + (1 - amount) * plotHeight;
+                              if (i === 0) {
+                                   parameterCtx.moveTo(x, y);
+                              } else {
+                                   parameterCtx.lineTo(x, y);
+                              }
+                         }
+
+                         parameterCtx.stroke();
+                    }
+
+                    const cursorX = leftPad + (currentIndex / Math.max(1, parameterFrames.length - 1)) * plotWidth;
+                    parameterCtx.strokeStyle = "#f2f5f7";
+                    parameterCtx.lineWidth = 1;
+                    parameterCtx.beginPath();
+                    parameterCtx.moveTo(cursorX, topPad);
+                    parameterCtx.lineTo(cursorX, parameterCanvas.height - bottomPad);
+                    parameterCtx.stroke();
+               }
+
                function heatColor(value) {
                     const v = Math.max(0, Math.min(1, value));
                     const r = Math.floor(255 * Math.max(0, Math.min(1, 1.8 * v - 0.35)));
@@ -403,6 +491,7 @@ function diagnostic_html_document(
                     if (timestamp - previousTime >= frameInterval) {
                          drawSwarm(swarmFrames[frameIndex]);
                          drawTraces(frameIndex);
+                         drawParameterTraces(frameIndex);
                          drawSpectrum(frameIndex);
                          frameIndex = (frameIndex + 1) % swarmFrames.length;
                          previousTime = timestamp;
@@ -414,6 +503,7 @@ function diagnostic_html_document(
                swarmCtx.fillStyle = "#050607";
                swarmCtx.fillRect(0, 0, swarmCanvas.width, swarmCanvas.height);
                drawTraces(0);
+               drawParameterTraces(0);
                drawSpectrum(0);
                requestAnimationFrame(animate);
           </script>
@@ -437,6 +527,19 @@ function audio_frame_json(frame)
             "\"high_band\":$(frame.high_band)," *
             "\"spectral_centroid\":$(frame.spectral_centroid)," *
             "\"onset_strength\":$(frame.onset_strength)" *
+            "}"
+end
+
+function parameter_frames_json(parameter_frames)
+     frame_strings = [parameter_frame_json(frame) for frame in parameter_frames]
+
+     return "[" * join(frame_strings, ",") * "]"
+end
+
+function parameter_frame_json(frame)
+     return "{" *
+            "\"speed\":$(frame.speed)," *
+            "\"noise_strength\":$(frame.noise_strength)" *
             "}"
 end
 
