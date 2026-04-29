@@ -49,6 +49,7 @@ function write_diagnostic_html_animation(
      fps::Real = 30,
      trail_alpha::Real = 0.12,
      feature_trace_keys = (:rms, :low_band, :mid_band, :high_band, :onset_strength),
+     extra_trace_series = (;),
      parameter_frames = nothing,
      spectrum_frames = nothing,
 )
@@ -64,6 +65,7 @@ function write_diagnostic_html_animation(
      fps > 0 || throw(ArgumentError("fps must be positive"))
      0 <= trail_alpha <= 1 || throw(ArgumentError("trail_alpha must be between 0 and 1"))
      trace_keys = collect_feature_trace_keys(feature_trace_keys)
+     extra_traces = collect_extra_trace_series(extra_trace_series, length(swarm_frames))
      if parameter_frames !== nothing
           length(swarm_frames) == length(parameter_frames) || throw(ArgumentError("swarm_frames and parameter_frames must have the same length"))
      end
@@ -89,6 +91,7 @@ function write_diagnostic_html_animation(
                     Float64(fps),
                     Float64(trail_alpha),
                     trace_keys,
+                    extra_traces,
                     parameter_frames,
                     spectrum_frames,
                ),
@@ -206,12 +209,14 @@ function diagnostic_html_document(
      fps,
      trail_alpha,
      trace_keys,
+     extra_traces,
      parameter_frames,
      spectrum_frames,
 )
      parameter_canvas = parameter_frames === nothing ? "" : """<canvas id="parameters" width="$(canvas_width)" height="$(parameter_canvas_height)"></canvas>"""
      parameter_json = parameter_frames === nothing ? "[]" : parameter_frames_json(parameter_frames)
      has_parameter_frames = parameter_frames === nothing ? "false" : "true"
+     extra_traces_json = extra_trace_series_json(extra_traces)
      spectrum_canvas = spectrum_frames === nothing ? "" : """<canvas id="spectrum" width="$(canvas_width)" height="$(spectrum_canvas_height)"></canvas>"""
      spectrum_json = spectrum_frames === nothing ? "[]" : spectrum_frames_json(spectrum_frames)
      has_spectrum = spectrum_frames === nothing ? "false" : "true"
@@ -265,6 +270,7 @@ function diagnostic_html_document(
                const swarmFrames = $(frames_json(swarm_frames));
                const audioFrames = $(audio_frames_json(audio_frames));
                const parameterFrames = $(parameter_json);
+               const extraTraceSeries = $(extra_traces_json);
                const spectrumFrames = $(spectrum_json);
                const hasParameterFrames = $(has_parameter_frames);
                const hasSpectrum = $(has_spectrum);
@@ -277,6 +283,7 @@ function diagnostic_html_document(
                     spectral_centroid: "#fc9867",
                     onset_strength: "#ab9df2"
                };
+               const extraTraceColors = ["#78dce8", "#a9dc76", "#ffd866", "#ff6188", "#fc9867", "#ab9df2", "#c6c8d1"];
                const domainWidth = $(domain_width);
                const domainHeight = $(domain_height);
                const swarmCanvas = document.getElementById("swarm");
@@ -326,14 +333,24 @@ function diagnostic_html_document(
                     traceCtx.fillText("0", 42, topPad + plotHeight);
                     traceCtx.fillText("1", 42, topPad + 5);
 
-                    for (const key of traceKeys) {
-                         traceCtx.strokeStyle = traceColors[key];
+                    const traces = traceKeys.map((key) => ({
+                         name: key,
+                         color: traceColors[key],
+                         values: audioFrames.map((frame) => frame[key])
+                    })).concat(extraTraceSeries.map((series, index) => ({
+                         name: series.name,
+                         color: extraTraceColors[index % extraTraceColors.length],
+                         values: series.values
+                    })));
+
+                    for (const trace of traces) {
+                         traceCtx.strokeStyle = trace.color;
                          traceCtx.lineWidth = 2;
                          traceCtx.beginPath();
 
-                         for (let i = 0; i < audioFrames.length; i++) {
-                              const x = leftPad + (i / Math.max(1, audioFrames.length - 1)) * plotWidth;
-                              const y = topPad + (1 - audioFrames[i][key]) * plotHeight;
+                         for (let i = 0; i < trace.values.length; i++) {
+                              const x = leftPad + (i / Math.max(1, trace.values.length - 1)) * plotWidth;
+                              const y = topPad + (1 - trace.values[i]) * plotHeight;
                               if (i === 0) {
                                    traceCtx.moveTo(x, y);
                               } else {
@@ -344,7 +361,7 @@ function diagnostic_html_document(
                          traceCtx.stroke();
                     }
 
-                    const cursorX = leftPad + (currentIndex / Math.max(1, audioFrames.length - 1)) * plotWidth;
+                    const cursorX = leftPad + (currentIndex / Math.max(1, swarmFrames.length - 1)) * plotWidth;
                     traceCtx.strokeStyle = "#f2f5f7";
                     traceCtx.lineWidth = 1;
                     traceCtx.beginPath();
@@ -353,11 +370,11 @@ function diagnostic_html_document(
                     traceCtx.stroke();
 
                     let legendX = leftPad;
-                    for (const key of traceKeys) {
-                         traceCtx.fillStyle = traceColors[key];
+                    for (const trace of traces) {
+                         traceCtx.fillStyle = trace.color;
                          traceCtx.fillRect(legendX, traceCanvas.height - 16, 10, 10);
                          traceCtx.fillStyle = "#d7dde2";
-                         traceCtx.fillText(key, legendX + 14, traceCanvas.height - 7);
+                         traceCtx.fillText(trace.name, legendX + 14, traceCanvas.height - 7);
                          legendX += 130;
                     }
                }
@@ -573,6 +590,37 @@ end
 
 function trace_keys_json(trace_keys)
      return "[" * join(["\"$(key)\"" for key in trace_keys], ",") * "]"
+end
+
+function collect_extra_trace_series(extra_trace_series, expected_length::Integer)
+     trace_pairs = collect(pairs(extra_trace_series))
+     extra_traces = Pair{Symbol, Vector{Float64}}[]
+
+     for (name, values) in trace_pairs
+          trace_name = Symbol(name)
+          trace_values = Vector{Float64}(values)
+          length(trace_values) == expected_length || throw(ArgumentError("extra trace $(trace_name) must have $(expected_length) values"))
+          all(isfinite, trace_values) || throw(ArgumentError("extra trace $(trace_name) values must be finite"))
+          all(value -> 0 <= value <= 1, trace_values) || throw(ArgumentError("extra trace $(trace_name) values must be between 0 and 1"))
+          push!(extra_traces, trace_name => trace_values)
+     end
+
+     return extra_traces
+end
+
+function extra_trace_series_json(extra_traces)
+     series_strings = [extra_trace_json(name, values) for (name, values) in extra_traces]
+
+     return "[" * join(series_strings, ",") * "]"
+end
+
+function extra_trace_json(name::Symbol, values::Vector{Float64})
+     values_json = "[" * join(string.(values), ",") * "]"
+
+     return "{" *
+            "\"name\":\"$(name)\"," *
+            "\"values\":$(values_json)" *
+            "}"
 end
 
 is_diagnostic_audio_feature(feature::Symbol) = feature in (
