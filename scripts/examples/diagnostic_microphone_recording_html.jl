@@ -53,8 +53,8 @@ const MICROPHONE_DIAGNOSTIC_CONFIG = MicrophoneDiagnosticConfig(
      100.0,
      45.0,
      0.08,
-     FeatureParameterMapping(0.05, 1.6, 0.01, 1.4; speed_feature = :rms, noise_feature = :onset_strength),
-     SwarmParameters(0.6, 7.0, 0.12, 100.0, 100.0),
+     FeatureParameterMapping(0.02, 2.0, 0.0, 3.0; speed_feature = :rms, noise_feature = :onset_strength),
+     SwarmParameters(0.6, 2.0, 0.12, 100.0, 100.0),
 )
 
 function run_example()
@@ -67,21 +67,21 @@ function run_example()
      onset_frames = with_onset_strength(analysis.features, OnsetStrengthConfig(config.onset_scale))
      smoothed_frames = smooth_feature_frames(onset_frames, ExponentialSmoothingConfig(config.smoothing_alpha))
      envelope = envelope_feature_values(onset_frames, PeakDecayEnvelopeConfig(config.envelope_attack_alpha, config.envelope_decay_alpha); feature = :rms)
+     control_frames = envelope_speed_control_frames(smoothed_frames, envelope)
      state = initialize_swarm(config.particle_count, config.base_params, rng)
-     run_frames = run_controlled_simulation(state, config.base_params, smoothed_frames, config.mapping, 1.0, rng)
+     run_frames = run_controlled_simulation(state, config.base_params, control_frames, config.mapping, 1.0, rng)
      swarm_frames = [frame.swarm for frame in run_frames]
      parameter_frames = [frame.params for frame in run_frames]
 
      write_diagnostic_html_animation(
           config.output_path,
           swarm_frames,
-          smoothed_frames,
+          control_frames,
           config.domain_width,
           config.domain_height;
           fps = config.fps,
           trail_alpha = config.trail_alpha,
           feature_trace_keys = (:rms, :onset_strength),
-          extra_trace_series = (; rms_envelope = envelope),
           parameter_frames = parameter_frames,
           spectrum_frames = analysis.spectra,
      )
@@ -122,6 +122,23 @@ function record_microphone_sample_frames(input_device, frame_count::Integer; sam
      end
 
      return frames
+end
+
+function envelope_speed_control_frames(frames::AbstractVector{AudioFeatureFrame}, envelope::AbstractVector{<:Real})
+     length(frames) == length(envelope) || throw(ArgumentError("frames and envelope must have the same length"))
+
+     return [
+          AudioFeatureFrame(
+               frames[index].time,
+               envelope[index],
+               frames[index].low_band,
+               frames[index].mid_band,
+               frames[index].high_band,
+               frames[index].spectral_centroid,
+               frames[index].onset_strength,
+          )
+          for index in eachindex(frames)
+     ]
 end
 
 function save_sample_frames(path::AbstractString, frames::AbstractVector{AudioSampleFrame})
