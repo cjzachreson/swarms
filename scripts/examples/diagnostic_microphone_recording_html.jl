@@ -1,12 +1,15 @@
 using PortAudio
 using Random
+using Serialization
 using SoundSwarms
 
 struct MicrophoneDiagnosticConfig
+     mode::Symbol
      device_name_fragment::String
      sample_rate::Int
      window_size::Int
      duration_seconds::Float64
+     recording_path::String
      output_path::String
      max_frequency::Float64
      spectrum_bin_count::Int
@@ -23,11 +26,21 @@ struct MicrophoneDiagnosticConfig
      base_params::SwarmParameters
 end
 
+function microphone_mode()
+     mode_name = lowercase(get(ENV, "SOUNDSWARMS_MIC_MODE", "record"))
+     mode_name == "record" && return :record
+     mode_name == "replay" && return :replay
+
+     throw(ArgumentError("SOUNDSWARMS_MIC_MODE must be record or replay"))
+end
+
 const MICROPHONE_DIAGNOSTIC_CONFIG = MicrophoneDiagnosticConfig(
+     microphone_mode(),
      "C270 HD WEBCAM",
      48000,
      1024,
      5.0,
+     joinpath("outputs", "recordings", "microphone_recording.jls"),
      joinpath("outputs", "diagnostic_microphone_recording.html"),
      5000.0,
      72,
@@ -48,10 +61,8 @@ function run_example()
      rng = MersenneTwister(126)
      config = MICROPHONE_DIAGNOSTIC_CONFIG
      frame_count = ceil(Int, config.duration_seconds * config.sample_rate / config.window_size)
-     input_device = preferred_input_device(config.device_name_fragment)
 
-     cue_recording(input_device, config)
-     sample_frames = record_microphone_sample_frames(input_device, frame_count; sample_rate = config.sample_rate, window_size = config.window_size)
+     sample_frames = microphone_sample_frames(config, frame_count)
      analysis = analyze_sample_frames_dsp(sample_frames; max_frequency = config.max_frequency, spectrum_bin_count = config.spectrum_bin_count, spectrum_normalization = :global)
      onset_frames = with_onset_strength(analysis.features, OnsetStrengthConfig(config.onset_scale))
      smoothed_frames = smooth_feature_frames(onset_frames, ExponentialSmoothingConfig(config.smoothing_alpha))
@@ -77,6 +88,21 @@ function run_example()
      println("Wrote $(config.output_path)")
 end
 
+function microphone_sample_frames(config::MicrophoneDiagnosticConfig, frame_count::Integer)
+     if config.mode === :record
+          input_device = preferred_input_device(config.device_name_fragment)
+          cue_recording(input_device, config)
+          sample_frames = record_microphone_sample_frames(input_device, frame_count; sample_rate = config.sample_rate, window_size = config.window_size)
+          save_sample_frames(config.recording_path, sample_frames)
+          return sample_frames
+     elseif config.mode === :replay
+          println("Replaying microphone recording from: $(config.recording_path)")
+          return load_sample_frames(config.recording_path)
+     end
+
+     throw(ArgumentError("mode must be :record or :replay"))
+end
+
 function record_microphone_sample_frames(input_device, frame_count::Integer; sample_rate::Integer, window_size::Integer)
      frame_count > 0 || throw(ArgumentError("frame_count must be positive"))
      window_size > 0 || throw(ArgumentError("window_size must be positive"))
@@ -98,6 +124,28 @@ function record_microphone_sample_frames(input_device, frame_count::Integer; sam
      return frames
 end
 
+function save_sample_frames(path::AbstractString, frames::AbstractVector{AudioSampleFrame})
+     !isempty(frames) || throw(ArgumentError("frames must not be empty"))
+
+     mkpath(dirname(path))
+     open(path, "w") do io
+          serialize(io, collect(frames))
+     end
+     println("Saved recording to $(path)")
+
+     return path
+end
+
+function load_sample_frames(path::AbstractString)
+     isfile(path) || throw(ArgumentError("recording file does not exist: $(path)"))
+
+     frames = open(deserialize, path)
+     frames isa Vector{AudioSampleFrame} || throw(ArgumentError("recording file does not contain AudioSampleFrame data: $(path)"))
+     !isempty(frames) || throw(ArgumentError("recording file contains no frames: $(path)"))
+
+     return frames
+end
+
 function preferred_input_device(name_fragment::AbstractString)
      input_devices = [device for device in devices() if device.input_bounds.max_channels > 0]
 
@@ -115,6 +163,7 @@ function cue_recording(input_device, config::MicrophoneDiagnosticConfig)
      println("Recording $(config.duration_seconds) seconds from: $(input_device.name)")
      println("Sample rate: $(config.sample_rate) Hz")
      println("Window size: $(config.window_size) samples")
+     println("Recording save path: $(config.recording_path)")
      println("Output: $(config.output_path)")
      for count in 3:-1:1
           println("Starting in $(count)...")
