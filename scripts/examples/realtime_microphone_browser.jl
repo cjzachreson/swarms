@@ -73,7 +73,7 @@ function route_stream(stream, config::RealtimeBrowserConfig)
 end
 
 function run_realtime_loop(websocket, config::RealtimeBrowserConfig)
-     rng = MersenneTwister(512)
+     rng = MersenneTwister(5)
      input_device = preferred_input_device(config.device_name_fragment)
      stream = PortAudioStream(input_device, 1, 0; samplerate = config.sample_rate, frames_per_buffer = config.window_size)
      state = initialize_swarm(config.particle_count, config.base_params, rng)
