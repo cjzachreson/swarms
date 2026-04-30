@@ -27,7 +27,7 @@ const REALTIME_BROWSER_CONFIG = RealtimeBrowserConfig(
      1024,
      "127.0.0.1",
      8080,
-     220,
+     1000, #particle count
      100.0,
      100.0,
      5000.0,
