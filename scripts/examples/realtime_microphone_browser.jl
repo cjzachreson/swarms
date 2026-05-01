@@ -22,7 +22,7 @@ struct RealtimeBrowserConfig
 end
 
 const REALTIME_BROWSER_CONFIG = RealtimeBrowserConfig(
-     "C270 HD WEBCAM",
+     "Surface Stereo Microphones (5- ",#"C270 HD WEBCAM",
      48000,
      1024,
      "127.0.0.1",
